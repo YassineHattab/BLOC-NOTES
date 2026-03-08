@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ProPad Cloud - Dossiers</title>
     <style>
-        :root { --primary: #2563eb; --bg: #ffffff; --text: #1f2937; --surface: #f3f4f6; --accent: #f59e0b; }
+        :root { --primary: #2563eb; --bg: #ffffff; --text: #1f2937; --surface: #f3f4f6; --accent: #f59e0b; --danger: #ef4444; }
         @media (prefers-color-scheme: dark) { :root { --bg: #111827; --text: #f9fafb; --surface: #1f2937; } }
         body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; padding-bottom: 80px; }
         
@@ -14,19 +14,20 @@
         /* Style des Dossiers */
         .folder { margin: 15px 20px; background: var(--surface); border-radius: 12px; overflow: hidden; border: 1px solid rgba(0,0,0,0.05); }
         .folder-header { padding: 15px; background: rgba(37, 99, 235, 0.1); display: flex; justify-content: space-between; align-items: center; cursor: pointer; font-weight: bold; }
-        .folder-content { padding: 10px; display: block; } /* Visible par défaut */
+        .folder-content { padding: 10px; display: block; }
         .folder-count { background: var(--primary); color: white; padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; }
 
         .note-item { background: var(--bg); padding: 12px; border-radius: 8px; margin-bottom: 8px; cursor: pointer; border-left: 4px solid transparent; box-shadow: 0 2px 5px rgba(0,0,0,0.02); }
         .note-item.pinned { border-left-color: var(--accent); }
         .my-note-item { border-left-color: var(--primary); }
 
+        .btn-action { background: none; border: none; font-size: 0.75rem; font-weight: bold; cursor: pointer; padding: 5px 0; margin-top: 5px; }
+        
         .screen { display: none; }
         .screen.active { display: block; }
         
         .editor-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 200; flex-direction: column; display: none; }
         .editor-screen.active { display: flex; }
-
         .editor-input { border: none; outline: none; background: transparent; color: var(--text); font-size: 1.5rem; font-weight: bold; width: 100%; padding: 20px; box-sizing: border-box; }
         .editor-textarea { flex: 1; border: none; outline: none; background: transparent; color: var(--text); font-size: 1.1rem; line-height: 1.6; resize: none; padding: 20px; box-sizing: border-box; }
         
@@ -70,7 +71,6 @@
     const app = initializeApp(firebaseConfig);
     const db = getDatabase(app);
 
-    // Identifiant unique permanent pour éviter de redemander le nom
     let userId = localStorage.getItem('propad_uid') || ('user_' + Math.random().toString(36).substr(2, 9));
     localStorage.setItem('propad_uid', userId);
     
@@ -94,7 +94,6 @@
         const container = document.getElementById('folders-container');
         container.innerHTML = '';
 
-        // Regrouper les notes par Auteur
         const groups = notes.reduce((acc, note) => {
             const author = note.author || "Inconnu";
             if (!acc[author]) acc[author] = [];
@@ -102,17 +101,15 @@
             return acc;
         }, {});
 
-        // Afficher d'abord MON dossier, puis les autres
         const authors = Object.keys(groups).sort((a, b) => (a === userName ? -1 : b === userName ? 1 : 0));
 
         authors.forEach(author => {
             const userNotes = groups[author].sort((a,b) => b.pinned - a.pinned || b.timestamp - a.timestamp);
-            
             const folder = document.createElement('div');
             folder.className = 'folder';
             folder.innerHTML = `
                 <div class="folder-header" onclick="toggleFolder(this)">
-                    <span>📁 Dossier de ${author} ${author === userName ? '(Moi)' : ''}</span>
+                    <span>📁 Dossier de ${author}</span>
                     <span class="folder-count">${userNotes.length} notes</span>
                 </div>
                 <div class="folder-content"></div>
@@ -126,10 +123,10 @@
                 item.innerHTML = `
                     <div style="font-weight:bold">${n.pinned ? '📌 ' : ''}${n.title || 'Sans titre'}</div>
                     <div style="font-size:0.7rem; opacity:0.5; margin-top:4px;">Modifié le ${n.dateStr}</div>
+                    ${n.author === userName ? `<button class="btn-action" style="color:var(--danger)" onclick="event.stopPropagation(); window.del('${n.id}')">Supprimer</button>` : ''}
                 `;
                 contentDiv.appendChild(item);
             });
-
             container.appendChild(folder);
         });
     }
@@ -139,13 +136,11 @@
         content.style.display = content.style.display === 'none' ? 'block' : 'none';
     };
 
+    window.del = (id) => { if(confirm("Supprimer cette note ?")) remove(ref(db, 'notes/' + id)); };
+
     function openNote(id) {
         currentId = id;
         const n = notes.find(x => x.id === id);
-        if (n.author !== userName) {
-            alert("Ceci est le dossier de " + n.author + ". Vous pouvez lire mais pas modifier.");
-            // On peut bloquer l'édition ici si nécessaire
-        }
         document.getElementById('note-title').value = n.title || '';
         document.getElementById('note-content').value = n.content || '';
         document.getElementById('screen-editor').classList.add('active');
@@ -153,15 +148,12 @@
 
     function save() {
         if (currentId) {
-            const n = notes.find(x => x.id === currentId);
-            if (n && n.author !== userName) return; // Sécurité : n'écrase pas le travail des autres
-
             update(ref(db, 'notes/' + currentId), {
                 title: document.getElementById('note-title').value,
                 content: document.getElementById('note-content').value,
                 timestamp: Date.now(),
                 author: userName,
-                uid: userId, // On lie la note à l'ID permanent
+                uid: userId,
                 dateStr: new Date().toLocaleDateString('fr-FR')
             });
         }
@@ -181,15 +173,6 @@
         save();
         document.getElementById('screen-editor').classList.remove('active');
     };
-
-    // Gestion de l'épinglage (via console ou bouton à ajouter)
-    window.pinNote = (id) => {
-        const n = notes.find(x => x.id === id);
-        if(n.author === userName) update(ref(db, 'notes/' + id), { pinned: !n.pinned });
-    };
-
-    document.getElementById('note-title').oninput = save;
-    document.getElementById('note-content').oninput = save;
 </script>
 </body>
 </html>
