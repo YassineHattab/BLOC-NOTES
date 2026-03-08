@@ -3,45 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ProPad Cloud - Organisé par IP</title>
+    <title>ProPad Cloud - Personnalisé</title>
     <style>
-        :root { --primary: #2563eb; --bg: #ffffff; --text: #1f2937; --surface: #f3f4f6; --accent: #f59e0b; }
+        :root { --primary: #2563eb; --bg: #ffffff; --text: #1f2937; --surface: #f3f4f6; --accent: #f59e0b; --danger: #ef4444; }
         @media (prefers-color-scheme: dark) { :root { --bg: #111827; --text: #f9fafb; --surface: #1f2937; } }
         body { font-family: sans-serif; background: var(--bg); color: var(--text); margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        header { padding: 15px 20px; border-bottom: 1px solid var(--surface); display: flex; justify-content: space-between; align-items: center; }
-        .section-title { font-size: 0.8rem; font-weight: bold; text-transform: uppercase; margin: 20px 0 10px 0; color: var(--primary); letter-spacing: 1px; }
+        
+        header { padding: 15px 20px; border-bottom: 1px solid var(--surface); display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; background: var(--bg); z-index: 10; }
+        .section-title { font-size: 0.75rem; font-weight: bold; text-transform: uppercase; margin: 25px 0 10px 0; color: var(--primary); letter-spacing: 1px; display: flex; justify-content: space-between; }
+        
         .screen { display: none; flex: 1; flex-direction: column; overflow-y: auto; padding: 0 20px 20px 20px; }
         .screen.active { display: flex; }
-        .note-item { background: var(--surface); padding: 15px; border-radius: 12px; margin-bottom: 12px; cursor: pointer; border-left: 4px solid transparent; }
-        .my-note { border-left-color: var(--primary); background: rgba(37, 99, 235, 0.05); }
-        .editor-input { border: none; outline: none; background: transparent; color: var(--text); font-size: 1.5rem; font-weight: bold; width: 100%; margin-top: 10px; }
-        .editor-textarea { flex: 1; border: none; outline: none; background: transparent; color: var(--text); font-size: 1.1rem; line-height: 1.6; resize: none; margin-top: 15px; }
-        .fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: var(--primary); color: white; border-radius: 50%; border: none; font-size: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; }
+
+        .note-item { background: var(--surface); padding: 15px; border-radius: 12px; margin-bottom: 12px; cursor: pointer; border-left: 5px solid transparent; transition: 0.2s; }
+        .note-item.pinned { border-left-color: var(--accent); background: rgba(245, 158, 11, 0.05); }
+        .my-note { border-left-color: var(--primary); }
+        .note-item.pinned.my-note { border-left-color: var(--accent); }
+
+        .actions { display: flex; gap: 15px; margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.05); }
+        .btn-action { background: none; border: none; font-size: 0.75rem; font-weight: bold; color: var(--primary); cursor: pointer; padding: 0; }
+        
+        .editor-input { border: none; outline: none; background: transparent; color: var(--text); font-size: 1.5rem; font-weight: bold; width: 100%; margin-top: 15px; }
+        .editor-textarea { flex: 1; border: none; outline: none; background: transparent; color: var(--text); font-size: 1.1rem; line-height: 1.6; resize: none; margin-top: 10px; }
+        
+        .fab { position: fixed; bottom: 30px; right: 30px; width: 60px; height: 60px; background: var(--primary); color: white; border-radius: 50%; border: none; font-size: 35px; box-shadow: 0 4px 15px rgba(0,0,0,0.2); cursor: pointer; z-index: 100; }
+        .change-name { font-size: 0.7rem; color: var(--primary); cursor: pointer; text-decoration: underline; }
     </style>
 </head>
 <body>
 
 <div id="screen-list" class="screen active">
     <header>
-        <div style="font-weight: 800; color: var(--primary);">ProPad Cloud</div>
-        <div id="user-ip" style="font-size: 0.7rem; opacity: 0.5;">Détection IP...</div>
-    </header>
-    <div id="notes-container" style="padding-bottom: 90px;">
+        <div>
+            <div style="font-weight: 800; color: var(--primary); font-size: 1.2rem;">ProPad Cloud</div>
+            <div id="display-username" style="font-size: 0.8rem; opacity: 0.7;">Chargement...</div>
         </div>
+        <div class="change-name" onclick="askForName()">Changer de nom</div>
+    </header>
+    <div id="notes-container" style="padding-bottom: 90px;"></div>
     <button class="fab" id="add-btn">+</button>
 </div>
 
 <div id="screen-editor" class="screen">
-    <div style="padding: 15px 0;"><button id="close-btn" style="background:none; border:none; color:var(--primary); font-weight:bold; cursor:pointer;">← Retour</button></div>
+    <div style="padding: 15px 0;"><button id="close-btn" style="background:none; border:none; color:var(--primary); font-weight:bold; cursor:pointer; font-size:1rem;">← Liste</button></div>
     <input type="text" id="note-title" class="editor-input" placeholder="Titre">
-    <textarea id="note-content" class="editor-textarea" placeholder="Votre message..."></textarea>
+    <textarea id="note-content" class="editor-textarea" placeholder="Votre texte public..."></textarea>
 </div>
 
 <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, set, onValue, update, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // --- GARDEZ VOS PARAMÈTRES FIREBASE ICI ---
     const firebaseConfig = {
         apiKey: "AIzaSyCp68lJaNETkr72qfbKTfq3zmsB8lW3GUY",
         authDomain: "propad-cloud.firebaseapp.com",
@@ -56,17 +68,23 @@
     const db = getDatabase(app);
     let notes = [];
     let currentId = null;
-    let userIP = "Inconnu";
+    let userName = localStorage.getItem('propad_user') || "";
 
-    // Récupérer l'adresse IP publique via un service gratuit
-    fetch('https://api.ipify.org?format=json')
-        .then(response => response.json())
-        .then(data => {
-            userIP = data.ip;
-            document.getElementById('user-ip').innerText = "Mon IP : " + userIP;
+    // Gestion du nom d'utilisateur
+    window.askForName = () => {
+        let name = prompt("Entrez votre nom pour regrouper vos notes :", userName);
+        if (name && name.trim() !== "") {
+            userName = name.trim();
+            localStorage.setItem('propad_user', userName);
+            document.getElementById('display-username').innerText = "Auteur : " + userName;
             render();
-        });
+        }
+    };
 
+    if (!userName) askForName();
+    else document.getElementById('display-username').innerText = "Auteur : " + userName;
+
+    // Synchronisation Firebase
     onValue(ref(db, 'notes/'), (snapshot) => {
         const data = snapshot.val();
         notes = data ? Object.entries(data).map(([id, val]) => ({ id, ...val })) : [];
@@ -77,36 +95,45 @@
         const container = document.getElementById('notes-container');
         container.innerHTML = '';
 
-        // Séparer les notes de l'utilisateur et les autres
-        const myNotes = notes.filter(n => n.ip === userIP).sort((a,b) => b.timestamp - a.timestamp);
-        const otherNotes = notes.filter(n => n.ip !== userIP).sort((a,b) => b.timestamp - a.timestamp);
+        // Tri : D'abord mes notes, puis les autres. Dans chaque groupe, les épinglées en premier.
+        const myNotes = notes.filter(n => n.author === userName).sort((a,b) => {
+            if (a.pinned === b.pinned) return b.timestamp - a.timestamp;
+            return a.pinned ? -1 : 1;
+        });
 
-        // Section : MES NOTES
+        const otherNotes = notes.filter(n => n.author !== userName).sort((a,b) => b.timestamp - a.timestamp);
+
         if (myNotes.length > 0) {
-            container.innerHTML += `<div class="section-title">Mes Pages (${userIP})</div>`;
-            myNotes.forEach(n => container.appendChild(createNoteUI(n, true)));
+            container.innerHTML += `<div class="section-title">Mes Notes <span>${myNotes.length}</span></div>`;
+            myNotes.forEach(n => container.appendChild(createUI(n, true)));
         }
 
-        // Section : AUTRES UTILISATEURS
         if (otherNotes.length > 0) {
-            container.innerHTML += `<div class="section-title">Pages des autres</div>`;
-            otherNotes.forEach(n => container.appendChild(createNoteUI(n, false)));
+            container.innerHTML += `<div class="section-title">Notes de la communauté</div>`;
+            otherNotes.forEach(n => container.appendChild(createUI(n, false)));
         }
     }
 
-    function createNoteUI(n, isMine) {
+    function createUI(n, isMine) {
         const div = document.createElement('div');
-        div.className = `note-item ${isMine ? 'my-note' : ''}`;
+        div.className = `note-item ${n.pinned ? 'pinned' : ''} ${isMine ? 'my-note' : ''}`;
         div.onclick = () => openNote(n.id);
         div.innerHTML = `
-            <div style="font-weight:bold">${n.title || 'Sans titre'}</div>
-            <div style="font-size:0.75rem; opacity:0.6; margin-top:5px;">Posté par ${isMine ? 'Moi' : n.ip} - ${n.dateStr || ''}</div>
-            ${isMine ? `<button style="color:red; background:none; border:none; padding:10px 0; cursor:pointer;" onclick="event.stopPropagation(); window.del('${n.id}')">Supprimer</button>` : ''}
+            <div style="font-weight:bold">${n.pinned ? '📌 ' : ''}${n.title || 'Sans titre'}</div>
+            <div style="font-size:0.7rem; opacity:0.6; margin-top:5px;">Par ${n.author} • ${n.dateStr || ''}</div>
+            ${isMine ? `
+                <div class="actions">
+                    <button class="btn-action" onclick="event.stopPropagation(); window.togglePin('${n.id}', ${n.pinned})">${n.pinned ? 'Détacher' : 'Épingler'}</button>
+                    <button class="btn-action" style="color:var(--danger)" onclick="event.stopPropagation(); window.del('${n.id}')">Supprimer</button>
+                </div>
+            ` : ''}
         `;
         return div;
     }
 
-    window.del = (id) => { if(confirm("Supprimer cette note ?")) remove(ref(db, 'notes/' + id)); };
+    // Fonctions Globales Cloud
+    window.togglePin = (id, status) => update(ref(db, 'notes/' + id), { pinned: !status });
+    window.del = (id) => { if(confirm("Supprimer votre note ?")) remove(ref(db, 'notes/' + id)); };
 
     function openNote(id) {
         currentId = id;
@@ -123,22 +150,27 @@
                 title: document.getElementById('note-title').value,
                 content: document.getElementById('note-content').value,
                 timestamp: Date.now(),
-                ip: userIP, // On enregistre l'IP avec la note
+                author: userName,
                 dateStr: new Date().toLocaleDateString('fr-FR')
             });
         }
     }
 
     document.getElementById('add-btn').onclick = () => {
+        if(!userName) return askForName();
         const newId = Date.now().toString();
-        set(ref(db, 'notes/' + newId), { title: '', content: '', ip: userIP, timestamp: Date.now(), dateStr: new Date().toLocaleDateString('fr-FR') });
+        set(ref(db, 'notes/' + newId), { 
+            title: '', content: '', author: userName, 
+            pinned: false, timestamp: Date.now(), 
+            dateStr: new Date().toLocaleDateString('fr-FR') 
+        });
         openNote(newId);
     };
 
     document.getElementById('close-btn').onclick = () => {
         save();
-        document.getElementById('screen-editor').classList.remove('active');
         document.getElementById('screen-list').classList.add('active');
+        document.getElementById('screen-editor').classList.remove('active');
     };
 
     document.getElementById('note-title').oninput = save;
